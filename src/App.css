@@ -143,6 +143,32 @@ body {
   }
 }
 
+/* Copy button and label row */
+.label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.copy-btn {
+  border: 1px solid #e1e5ea;
+  background: #fff;
+  color: #2c3e50;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.85rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s, box-shadow 0.2s, opacity 0.2s;
+}
+.copy-btn:hover:not(:disabled) {
+  background: #f3f6f9;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.06);
+}
+.copy-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Mobile Styles */
 @media (max-width: 768px) {
   .container {

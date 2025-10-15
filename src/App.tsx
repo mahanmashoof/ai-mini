@@ -6,6 +6,7 @@ function App() {
   const [input, setInput] = useState("");
   const [response, setResponse] = useState("");
   const [loading, setLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const askAI = async () => {
     if (!input.trim()) return;
@@ -84,9 +85,28 @@ function App() {
           </div>
         </form>
         <div className="output-group">
-          <label htmlFor="output" className="label">
-            AI Response
-          </label>
+          <div className="label-row">
+            <label htmlFor="output" className="label">
+              AI Response
+            </label>
+            <button
+              type="button"
+              className="copy-btn"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(response || "");
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 1200);
+                } catch (e) {
+                  console.error("Copy failed", e);
+                }
+              }}
+              disabled={!response}
+              aria-label="Copy AI response to clipboard"
+            >
+              {copied ? "Copied!" : "Copy"}
+            </button>
+          </div>
           <textarea
             id="output"
             className="textarea output-textarea"
