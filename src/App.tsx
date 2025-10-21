@@ -3,7 +3,8 @@ import axios from "axios";
 
 function App() {
   const [input, setInput] = useState("");
-  const [response, setResponse] = useState("");
+  const [issues, setIssues] = useState("");
+  const [advice, setAdvice] = useState("");
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -11,7 +12,8 @@ function App() {
     if (!input.trim()) return;
     try {
       setLoading(true);
-      setResponse("");
+      setIssues("");
+      setAdvice("");
       const res = await axios.post(
         "https://api.openai.com/v1/chat/completions",
         {
@@ -20,11 +22,16 @@ function App() {
             {
               role: "system",
               content:
-                "You are a polite assistant that improves form messages for clarity and tone.",
+                "You are a precise validator that reviews messages for completeness, tone, and clarity.",
             },
             {
               role: "user",
-              content: `Give a very brief, concise, and constructive feedback for this message: ${input}`,
+              content: `Validate this user message and respond in JSON:
+    {
+      "issues": [list of problems found],
+      "advice": "how to fix or improve"
+    }
+    Message: ${input}`,
             },
           ],
         },
@@ -34,10 +41,33 @@ function App() {
           },
         }
       );
-      setResponse(res.data.choices[0].message.content || "");
+
+      const content = res.data.choices[0].message.content || "";
+
+      try {
+        // Remove markdown code blocks if present
+        const cleanedContent = content
+          .replace(/```json\n?/g, "")
+          .replace(/```\n?/g, "")
+          .trim();
+
+        const parsed = JSON.parse(cleanedContent);
+        if (parsed.issues && Array.isArray(parsed.issues)) {
+          setIssues(parsed.issues.join("\n• "));
+        }
+        if (parsed.advice) {
+          setAdvice(parsed.advice);
+        }
+      } catch (parseError) {
+        console.error("Failed to parse JSON response:", parseError);
+        console.error("Raw content:", content);
+        setIssues("Unable to parse response");
+        setAdvice("Please try again");
+      }
     } catch (err) {
       console.error(err);
-      setResponse("Error: failed to get response. See console for details.");
+      setIssues("Error occurred");
+      setAdvice("Please try again");
     } finally {
       setLoading(false);
     }
@@ -131,54 +161,111 @@ function App() {
           </div>
         </form>
 
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <label
-              htmlFor="output"
-              className="block text-sm font-semibold text-gray-700"
-            >
-              AI Response
-            </label>
-            <button
-              type="button"
-              onClick={async () => {
-                try {
-                  await navigator.clipboard.writeText(response || "");
-                  setCopied(true);
-                  setTimeout(() => setCopied(false), 1200);
-                } catch (e) {
-                  console.error("Copy failed", e);
-                }
-              }}
-              disabled={!response}
-              className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
-              aria-label="Copy AI response to clipboard"
-            >
-              <svg
-                className="w-3.5 h-3.5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
+        {/* Issues Section */}
+        {issues.length > 0 && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label
+                htmlFor="issues"
+                className="block text-sm font-semibold text-red-700"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                />
-              </svg>
-              {copied ? "Copied!" : "Copy"}
-            </button>
+                ⚠️ List of detected problems
+              </label>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(issues || "");
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 1200);
+                  } catch (e) {
+                    console.error("Copy failed", e);
+                  }
+                }}
+                disabled={!issues}
+                className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                aria-label="Copy issues to clipboard"
+              >
+                <svg
+                  className="w-3.5 h-3.5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                  />
+                </svg>
+                {copied ? "Copied!" : "Copy"}
+              </button>
+            </div>
+            <textarea
+              id="issues"
+              className="w-full px-4 py-3 border-2 border-red-200 rounded-xl bg-red-50 text-red-800 focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none transition-all duration-200 resize-none"
+              value={issues}
+              readOnly
+              placeholder="Issues found in your message will appear here."
+              rows={3}
+            />
           </div>
-          <textarea
-            id="output"
-            className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl bg-gray-50 text-gray-700 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all duration-200 resize-none"
-            value={response}
-            readOnly
-            placeholder="AI response will appear here."
-            rows={5}
-          />
-        </div>
+        )}
+
+        {/* Advice Section */}
+        {issues.length > 0 ? (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label
+                htmlFor="advice"
+                className="block text-sm font-semibold text-green-700"
+              >
+                💡 Advice for improvement
+              </label>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(advice || "");
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 1200);
+                  } catch (e) {
+                    console.error("Copy failed", e);
+                  }
+                }}
+                disabled={!advice}
+                className="inline-flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                aria-label="Copy advice to clipboard"
+              >
+                <svg
+                  className="w-3.5 h-3.5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                  />
+                </svg>
+                {copied ? "Copied!" : "Copy"}
+              </button>
+            </div>
+            <textarea
+              id="advice"
+              className="w-full px-4 py-3 border-2 border-green-200 rounded-xl bg-green-50 text-green-800 focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none transition-all duration-200 resize-none"
+              value={advice}
+              readOnly
+              placeholder="Improvement advice will appear here."
+              rows={3}
+            />
+          </div>
+        ) : input.length === 0 ? null : (
+          <div>✅ No issues found</div>
+        )}
       </div>
     </main>
   );
