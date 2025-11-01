@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useMemo } from "react";
 import Papa from "papaparse";
 import {
   BarChart,
@@ -52,6 +52,25 @@ const sortDataByKey = (
   });
 };
 
+// Sample large datasets for better performance
+const sampleData = (
+  data: Record<string, string | number>[],
+  maxPoints: number = 100
+): Record<string, string | number>[] => {
+  if (data.length <= maxPoints) return data;
+
+  // Sample evenly across the dataset
+  const step = Math.floor(data.length / maxPoints);
+  const sampled: Record<string, string | number>[] = [];
+
+  for (let i = 0; i < data.length; i += step) {
+    sampled.push(data[i]);
+    if (sampled.length >= maxPoints) break;
+  }
+
+  return sampled;
+};
+
 const AIDashboard = () => {
   const [data, setData] = useState<Record<string, string | number>[]>([]);
   const [rawData, setRawData] = useState<Record<string, string | number>[]>([]);
@@ -97,9 +116,6 @@ const AIDashboard = () => {
           const firstKey = keys[0] || "";
           setSelectedKey(firstKey);
           setSelectedXAxis(firstKey);
-
-          // Sort by first key initially
-          setData(sortDataByKey(parsedData, firstKey));
         }
       },
       error: (error) => {
@@ -108,34 +124,49 @@ const AIDashboard = () => {
     });
   };
 
-  // Re-sort data when X-axis selection changes
-  useEffect(() => {
-    if (rawData.length > 0 && selectedXAxis) {
-      setData(sortDataByKey(rawData, selectedXAxis));
-    }
+  // Memoize sorted and sampled data for performance
+  const displayData = useMemo(() => {
+    if (rawData.length === 0 || !selectedXAxis) return [];
+
+    const sorted = sortDataByKey(rawData, selectedXAxis);
+    const sampled = sampleData(sorted, 100); // Limit to 100 points
+
+    return sampled;
   }, [selectedXAxis, rawData]);
 
-  // Helper to render different chart types
-  const renderChart = () => {
+  // Update data state when displayData changes
+  useEffect(() => {
+    setData(displayData);
+  }, [displayData]);
+
+  // Helper to render different chart types (memoized for performance)
+  const renderChart = useMemo(() => {
     if (chartType === "bar") {
       return (
         <BarChart data={data}>
           <XAxis
             dataKey={selectedXAxis}
             stroke="#6366f1"
+            height={70}
             label={{
               value: selectedXAxis.replace(/_/g, " "),
-              position: "bottom",
+              position: "insideBottom",
+              offset: 0,
+              className: "hidden lg:block",
             }}
           />
           <YAxis
             stroke="#6366f1"
+            width={80}
+            className="hidden lg:block"
             label={{
               value: selectedKey.replace(/_/g, " "),
               angle: -90,
               position: "insideLeft",
+              className: "hidden lg:block",
             }}
           />
+          <YAxis stroke="#6366f1" width={20} className="lg:hidden" />
           <Tooltip
             formatter={(value, name) => [value, name]}
             labelFormatter={(label) =>
@@ -158,19 +189,26 @@ const AIDashboard = () => {
           <XAxis
             dataKey={selectedXAxis}
             stroke="#6366f1"
+            height={70}
             label={{
               value: selectedXAxis.replace(/_/g, " "),
-              position: "bottom",
+              position: "insideBottom",
+              offset: 0,
+              className: "hidden lg:block",
             }}
           />
           <YAxis
             stroke="#6366f1"
+            width={80}
+            className="hidden lg:block"
             label={{
               value: selectedKey.replace(/_/g, " "),
               angle: -90,
               position: "insideLeft",
+              className: "hidden lg:block",
             }}
           />
+          <YAxis stroke="#6366f1" width={20} className="lg:hidden" />
           <Tooltip
             formatter={(value, name) => [value, name]}
             labelFormatter={(label) =>
@@ -191,7 +229,7 @@ const AIDashboard = () => {
     }
 
     return null;
-  };
+  }, [chartType, data, selectedXAxis, selectedKey]);
 
   const fetchAiSummary = useCallback(async () => {
     if (data.length === 0) {
@@ -284,11 +322,18 @@ const AIDashboard = () => {
           />
         </div>
         <div className="flex flex-col lg:grid lg:grid-cols-2 lg:gap-8">
-          <div className="lg:col-span-1 mb-8 lg:mb-0">
+          <div className="lg:col-span-1 mb-8 lg:mb-0 flex flex-col">
             <div className="mb-4">
-              <h2 className="text-2xl font-semibold text-gray-800 mb-2">
-                Visualization:
-              </h2>
+              <div className="flex justify-between items-center mb-2">
+                <h2 className="text-2xl font-semibold text-gray-800">
+                  Visualization:
+                </h2>
+                {rawData.length > 100 && (
+                  <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                    Showing {data.length} of {rawData.length} points
+                  </span>
+                )}
+              </div>
               {dataKeys.length > 0 && (
                 <div className="flex gap-2 flex-wrap">
                   <select
@@ -332,24 +377,24 @@ const AIDashboard = () => {
               )}
             </div>
             {data.length > 0 ? (
-              <div className="h-96 w-full min-w-0 min-h-[24rem] bg-white p-4 rounded-lg shadow-inner border border-gray-200">
+              <div className="flex-1 w-full bg-white p-4 rounded-lg shadow-inner border border-gray-200 lg:min-h-[32rem]">
                 <ResponsiveContainer
                   width="100%"
                   height="100%"
                   minWidth={0}
-                  minHeight={0}
+                  minHeight={400}
                 >
-                  {renderChart()}
+                  {renderChart}
                 </ResponsiveContainer>
               </div>
             ) : (
-              <div className="text-center p-10 bg-gray-100 rounded-lg text-gray-500 shadow-inner min-h-[24rem] flex items-center justify-center">
+              <div className="flex-1 text-center p-10 bg-gray-100 rounded-lg text-gray-500 shadow-inner lg:min-h-[32rem] flex items-center justify-center">
                 Upload a CSV file to see the chart.
               </div>
             )}
           </div>
 
-          <div className="lg:col-span-1">
+          <div className="lg:col-span-1 flex flex-col">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-2xl font-semibold text-gray-800 flex items-center">
                 <span className="text-xl mr-2">✨</span>
@@ -377,7 +422,7 @@ const AIDashboard = () => {
               </button>
             </div>
 
-            <div className="min-h-[24rem] bg-indigo-50 p-6 rounded-lg border border-indigo-200 shadow-md flex flex-col justify-between">
+            <div className="flex-1 bg-indigo-50 p-6 rounded-lg border border-indigo-200 shadow-md flex flex-col lg:min-h-[32rem]">
               {aiError && (
                 <div className="bg-red-100 border border-red-400 text-red-700 p-3 rounded flex items-center mb-4">
                   <span className="text-xl mr-2">⚠️</span>
