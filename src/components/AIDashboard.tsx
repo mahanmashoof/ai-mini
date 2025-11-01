@@ -1,8 +1,10 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import Papa from "papaparse";
 import {
   BarChart,
   Bar,
+  LineChart,
+  Line,
   XAxis,
   YAxis,
   Tooltip,
@@ -10,25 +12,53 @@ import {
 } from "recharts";
 import axios from "axios";
 
-interface DataPoint {
-  User_ID: string;
-  Age: string;
-  Gender: string;
-  "Daily_Screen_Time(hrs)": string;
-  "Sleep_Quality(1-10)": string;
-  "Stress_Level(1-10)": string;
-  Days_Without_Social_Media: string;
-  "Exercise_Frequency(week)": string;
-  Social_Media_Platform: string;
-  "Happiness_Index(1-10)": string;
-}
+// Helper function to convert string values to numbers where appropriate
+const parseValue = (value: string): string | number => {
+  if (value === "" || value === null || value === undefined) return value;
+  const num = Number(value);
+  return !isNaN(num) && value.trim() !== "" ? num : value;
+};
 
-//Todo:
-//1. dropdown to select visualization A vs visualizations B
-//2. params for AI to analyze focused on these aspects + give a solution
+const convertDataTypes = (
+  data: Record<string, string>[]
+): Record<string, string | number>[] => {
+  return data.map((row) => {
+    const convertedRow: Record<string, string | number> = {};
+    for (const key in row) {
+      convertedRow[key] = parseValue(row[key]);
+    }
+    return convertedRow;
+  });
+};
+
+// Sort data by a specific key (handles both numeric and alphabetic)
+const sortDataByKey = (
+  data: Record<string, string | number>[],
+  key: string
+): Record<string, string | number>[] => {
+  return [...data].sort((a, b) => {
+    const aVal = a[key];
+    const bVal = b[key];
+
+    // Both are numbers
+    if (typeof aVal === "number" && typeof bVal === "number") {
+      return aVal - bVal;
+    }
+
+    // Convert to string for alphabetic comparison
+    const aStr = String(aVal);
+    const bStr = String(bVal);
+    return aStr.localeCompare(bStr);
+  });
+};
 
 const AIDashboard = () => {
-  const [data, setData] = useState<DataPoint[]>([]);
+  const [data, setData] = useState<Record<string, string | number>[]>([]);
+  const [rawData, setRawData] = useState<Record<string, string | number>[]>([]);
+  const [dataKeys, setDataKeys] = useState<string[]>([]);
+  const [selectedKey, setSelectedKey] = useState<string>("");
+  const [selectedXAxis, setSelectedXAxis] = useState<string>("");
+  const [chartType, setChartType] = useState<"bar" | "line">("bar");
   const [aiSummary, setAiSummary] = useState<string>("");
   const [aiLoading, setAiLoading] = useState<boolean>(false);
   const [aiError, setAiError] = useState<string | null>(null);
@@ -53,18 +83,114 @@ const AIDashboard = () => {
       header: true,
       skipEmptyLines: true,
       complete: (results) => {
-        const typedData = results.data as DataPoint[];
+        const csvData = results.data as Record<string, string>[];
+        const parsedData = convertDataTypes(csvData);
 
-        const sortedData = typedData.sort(
-          (a, b) => Number(a.Age) - Number(b.Age)
-        );
+        setRawData(parsedData); // Store unsorted data
 
-        setData(sortedData);
+        // Extract keys from first data entry, excluding User_ID
+        if (parsedData.length > 0) {
+          const keys = Object.keys(parsedData[0]).filter(
+            (key) => key.toLowerCase() !== "user_id"
+          );
+          setDataKeys(keys);
+          const firstKey = keys[0] || "";
+          setSelectedKey(firstKey);
+          setSelectedXAxis(firstKey);
+
+          // Sort by first key initially
+          setData(sortDataByKey(parsedData, firstKey));
+        }
       },
       error: (error) => {
         setAiError(`CSV Parsing Error: ${error.message}`);
       },
     });
+  };
+
+  // Re-sort data when X-axis selection changes
+  useEffect(() => {
+    if (rawData.length > 0 && selectedXAxis) {
+      setData(sortDataByKey(rawData, selectedXAxis));
+    }
+  }, [selectedXAxis, rawData]);
+
+  // Helper to render different chart types
+  const renderChart = () => {
+    if (chartType === "bar") {
+      return (
+        <BarChart data={data}>
+          <XAxis
+            dataKey={selectedXAxis}
+            stroke="#6366f1"
+            label={{
+              value: selectedXAxis.replace(/_/g, " "),
+              position: "bottom",
+            }}
+          />
+          <YAxis
+            stroke="#6366f1"
+            label={{
+              value: selectedKey.replace(/_/g, " "),
+              angle: -90,
+              position: "insideLeft",
+            }}
+          />
+          <Tooltip
+            formatter={(value, name) => [value, name]}
+            labelFormatter={(label) =>
+              `${selectedXAxis.replace(/_/g, " ")}: ${label}`
+            }
+          />
+          <Bar
+            dataKey={selectedKey}
+            fill="#3b82f6"
+            name={selectedKey.replace(/_/g, " ")}
+            radius={[4, 4, 0, 0]}
+          />
+        </BarChart>
+      );
+    }
+
+    if (chartType === "line") {
+      return (
+        <LineChart data={data}>
+          <XAxis
+            dataKey={selectedXAxis}
+            stroke="#6366f1"
+            label={{
+              value: selectedXAxis.replace(/_/g, " "),
+              position: "bottom",
+            }}
+          />
+          <YAxis
+            stroke="#6366f1"
+            label={{
+              value: selectedKey.replace(/_/g, " "),
+              angle: -90,
+              position: "insideLeft",
+            }}
+          />
+          <Tooltip
+            formatter={(value, name) => [value, name]}
+            labelFormatter={(label) =>
+              `${selectedXAxis.replace(/_/g, " ")}: ${label}`
+            }
+          />
+          <Line
+            type="monotone"
+            dataKey={selectedKey}
+            stroke="#8b5cf6"
+            strokeWidth={2}
+            name={selectedKey.replace(/_/g, " ")}
+            dot={{ fill: "#8b5cf6", r: 4 }}
+            activeDot={{ r: 6 }}
+          />
+        </LineChart>
+      );
+    }
+
+    return null;
   };
 
   const fetchAiSummary = useCallback(async () => {
@@ -100,7 +226,13 @@ const AIDashboard = () => {
             },
             {
               role: "user",
-              content: `Summarize the main trends and patterns in this aggregated data: ${JSON.stringify(
+              content: `Analyze the data focusing on the relationship between ${selectedXAxis.replace(
+                /_/g,
+                " "
+              )} and ${selectedKey.replace(
+                /_/g,
+                " "
+              )}. Summarize key trends and patterns: ${JSON.stringify(
                 data,
                 null,
                 2
@@ -127,7 +259,7 @@ const AIDashboard = () => {
     } finally {
       setAiLoading(false);
     }
-  }, [data]);
+  }, [data, selectedKey, selectedXAxis]);
 
   return (
     <div className="p-8 min-h-screen bg-gradient-to-br from-indigo-50 to-purple-100">
@@ -153,9 +285,52 @@ const AIDashboard = () => {
         </div>
         <div className="flex flex-col lg:grid lg:grid-cols-2 lg:gap-8">
           <div className="lg:col-span-1 mb-8 lg:mb-0">
-            <h2 className="text-2xl font-semibold text-gray-800 mb-4">
-              Visualization: Screen Time by Age
-            </h2>
+            <div className="mb-4">
+              <h2 className="text-2xl font-semibold text-gray-800 mb-2">
+                Visualization:
+              </h2>
+              {dataKeys.length > 0 && (
+                <div className="flex gap-2 flex-wrap">
+                  <select
+                    value={chartType}
+                    onChange={(e) =>
+                      setChartType(e.target.value as "bar" | "line")
+                    }
+                    className="px-3 py-2 rounded-lg border-2 border-purple-300 bg-white text-gray-800 font-medium focus:outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer text-sm"
+                    title="Chart Type"
+                  >
+                    <option value="bar">📊 Bar Chart</option>
+                    <option value="line">📈 Line Chart</option>
+                  </select>
+                  <div>
+                    <select
+                      value={selectedXAxis}
+                      onChange={(e) => setSelectedXAxis(e.target.value)}
+                      className="px-3 py-2 mr-2 rounded-lg border-2 border-green-300 bg-white text-gray-800 font-medium focus:outline-none focus:ring-2 focus:ring-green-500 cursor-pointer text-sm"
+                      title="X-axis"
+                    >
+                      {dataKeys.map((key) => (
+                        <option key={key} value={key}>
+                          X: {key.replace(/_/g, " ")}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      value={selectedKey}
+                      onChange={(e) => setSelectedKey(e.target.value)}
+                      className="px-3 py-2 rounded-lg border-2 border-indigo-300 bg-white text-gray-800 font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer text-sm"
+                      title="Y-axis"
+                    >
+                      {dataKeys.map((key) => (
+                        <option key={key} value={key}>
+                          Y: {key.replace(/_/g, " ")}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
+            </div>
             {data.length > 0 ? (
               <div className="h-96 w-full min-w-0 min-h-[24rem] bg-white p-4 rounded-lg shadow-inner border border-gray-200">
                 <ResponsiveContainer
@@ -164,32 +339,7 @@ const AIDashboard = () => {
                   minWidth={0}
                   minHeight={0}
                 >
-                  <BarChart data={data}>
-                    <XAxis
-                      dataKey="Age"
-                      stroke="#6366f1"
-                      label={{ value: "Age", position: "bottom" }}
-                    />
-                    <YAxis
-                      dataKey="Daily_Screen_Time(hrs)"
-                      stroke="#6366f1"
-                      label={{
-                        value: "Screen Time (hrs)",
-                        angle: -90,
-                        position: "insideLeft",
-                      }}
-                    />
-                    <Tooltip
-                      formatter={(value, name) => [`${value} hrs`, name]}
-                      labelFormatter={(label) => `Age: ${label}`}
-                    />
-                    <Bar
-                      dataKey="Daily_Screen_Time(hrs)"
-                      fill="#3b82f6"
-                      name="Daily Screen Time"
-                      radius={[4, 4, 0, 0]}
-                    />
-                  </BarChart>
+                  {renderChart()}
                 </ResponsiveContainer>
               </div>
             ) : (
