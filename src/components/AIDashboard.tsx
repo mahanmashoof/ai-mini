@@ -378,7 +378,7 @@ const AIDashboard = () => {
               </button>
             </div>
 
-            <div className="flex-1 bg-indigo-50 p-6 rounded-lg border border-indigo-200 shadow-md flex flex-col lg:min-h-[16rem]">
+            <div className="flex-1 bg-indigo-50 p-6 rounded-lg border border-indigo-200 shadow-md flex flex-col lg:min-h-[8rem]">
               {aiError && (
                 <div className="bg-red-100 border border-red-400 text-red-700 p-3 rounded flex items-center mb-4">
                   <span className="text-xl mr-2">⚠️</span>
@@ -401,7 +401,7 @@ const AIDashboard = () => {
             </div>
 
             {/* Custom AI Question Section */}
-            <div className="mt-4 flex-1 bg-indigo-50 p-6 rounded-lg border border-indigo-200 shadow-md flex flex-col lg:min-h-[16rem]">
+            <div className="mt-4 flex-1 bg-indigo-50 p-6 rounded-lg border border-indigo-200 shadow-md flex flex-col lg:min-h-[24rem]">
               <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center">
                 <span className="text-lg mr-2">💬</span>
                 Ask a Custom Question
