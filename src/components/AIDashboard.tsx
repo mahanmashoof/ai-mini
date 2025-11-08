@@ -10,8 +10,12 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import axios from "axios";
-import { convertDataTypes, sampleData, sortDataByKey } from "../helpers";
+import {
+  convertDataTypes,
+  sampleData,
+  sortDataByKey,
+} from "../helpers/functions";
+import { fetchAiDataSummary, askAiQuestion } from "../helpers/apis";
 
 const AIDashboard = () => {
   const [data, setData] = useState<Record<string, string | number>[]>([]);
@@ -24,6 +28,34 @@ const AIDashboard = () => {
   const [aiLoading, setAiLoading] = useState<boolean>(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string>("");
+  const [question, setQuestion] = useState("");
+  const [answer, setAnswer] = useState("");
+  const [questionLoading, setQuestionLoading] = useState(false);
+  const [password, setPassword] = useState("");
+  const [isPasswordValid, setIsPasswordValid] = useState(false);
+
+  // Check password validity
+  useEffect(() => {
+    const correctPassword = import.meta.env.VITE_AI_API_PASSWORD || "1979";
+    setIsPasswordValid(password === correctPassword);
+  }, [password]);
+
+  const handleAskQuestion = async () => {
+    if (!question.trim()) return;
+
+    setQuestionLoading(true);
+    setAnswer("");
+
+    try {
+      const content = await askAiQuestion(question, data);
+      setAnswer(content);
+    } catch (error) {
+      console.error("Question API Error:", error);
+      setAnswer("Failed to get answer. Please try again.");
+    } finally {
+      setQuestionLoading(false);
+    }
+  };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -173,7 +205,7 @@ const AIDashboard = () => {
     return null;
   }, [chartType, data, selectedXAxis, selectedKey]);
 
-  const fetchAiSummary = useCallback(async () => {
+  const handleFetchAiSummary = useCallback(async () => {
     if (data.length === 0) {
       setAiError("Please upload data first.");
       return;
@@ -183,53 +215,12 @@ const AIDashboard = () => {
     setAiError(null);
     setAiSummary("");
 
-    const apiKey = import.meta.env.VITE_OPENAI_KEY || "";
-
-    if (!apiKey) {
-      setAiError(
-        "OpenAI API Key is missing. Check your environment configuration."
-      );
-      setAiLoading(false);
-      return;
-    }
-
     try {
-      const res = await axios.post(
-        "https://api.openai.com/v1/chat/completions",
-        {
-          model: "gpt-4o-mini",
-          messages: [
-            {
-              role: "system",
-              content:
-                "You are a concise data analyst. Analyze the provided JSON statistics from a survey on digital well-being. Summarize the most essential parts of the analysis in one sentence.",
-            },
-            {
-              role: "user",
-              content: `Analyze the data focusing on the relationship between ${selectedXAxis.replace(
-                /_/g,
-                " "
-              )} and ${selectedKey.replace(
-                /_/g,
-                " "
-              )}. Summarize key trends and patterns: ${JSON.stringify(
-                data,
-                null,
-                2
-              )}`,
-            },
-          ],
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${apiKey}`,
-            "Content-Type": "application/json",
-          },
-        }
+      const content = await fetchAiDataSummary(
+        data,
+        selectedXAxis,
+        selectedKey
       );
-
-      const content =
-        res.data.choices[0]?.message?.content || "No summary generated.";
       setAiSummary(content);
     } catch (e) {
       console.error("OpenAI API Error:", e);
@@ -244,9 +235,32 @@ const AIDashboard = () => {
   return (
     <div className="p-8 min-h-screen bg-gradient-to-br from-indigo-50 to-purple-100">
       <div className="max-w-7xl mx-auto bg-white shadow-2xl rounded-xl p-8">
-        <h1 className="text-3xl font-bold text-indigo-700 mb-8 flex items-center">
-          <span className="text-2xl mr-3">📊</span> {fileName}
-        </h1>
+        <div className="flex justify-between items-center mb-8">
+          <h1 className="text-3xl font-bold text-indigo-700 flex items-center">
+            <span className="text-2xl mr-3">📊</span> {fileName}
+          </h1>
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-gray-700">
+              AI Password:
+            </label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Enter password"
+              className={`px-3 py-2 border-2 rounded-lg text-sm focus:outline-none focus:ring-2 transition-all ${
+                password
+                  ? isPasswordValid
+                    ? "border-green-400 focus:ring-green-500 bg-green-50"
+                    : "border-red-400 focus:ring-red-500 bg-red-50"
+                  : "border-gray-300 focus:ring-indigo-500"
+              }`}
+            />
+            {password && (
+              <span className="text-xl">{isPasswordValid ? "✅" : "❌"}</span>
+            )}
+          </div>
+        </div>
         <div className="mb-8 border-b pb-6">
           <label className="block text-lg font-medium text-gray-700 mb-3">
             Upload CSV Data File
@@ -343,11 +357,11 @@ const AIDashboard = () => {
                 AI Trend Analysis
               </h2>
               <button
-                onClick={fetchAiSummary}
-                disabled={data.length === 0 || aiLoading}
+                onClick={handleFetchAiSummary}
+                disabled={data.length === 0 || aiLoading || !isPasswordValid}
                 className={`px-4 py-2 rounded-full text-sm font-semibold transition-all duration-200 flex items-center
                   ${
-                    data.length === 0 || aiLoading
+                    data.length === 0 || aiLoading || !isPasswordValid
                       ? "bg-gray-200 text-gray-500 cursor-not-allowed"
                       : "bg-indigo-600 text-white hover:bg-indigo-700 shadow-md"
                   }`}
@@ -364,7 +378,7 @@ const AIDashboard = () => {
               </button>
             </div>
 
-            <div className="flex-1 bg-indigo-50 p-6 rounded-lg border border-indigo-200 shadow-md flex flex-col lg:min-h-[32rem]">
+            <div className="flex-1 bg-indigo-50 p-6 rounded-lg border border-indigo-200 shadow-md flex flex-col lg:min-h-[16rem]">
               {aiError && (
                 <div className="bg-red-100 border border-red-400 text-red-700 p-3 rounded flex items-center mb-4">
                   <span className="text-xl mr-2">⚠️</span>
@@ -383,8 +397,56 @@ const AIDashboard = () => {
                 )
               )}
             </div>
+
+            {/* Custom AI Question Section */}
+            <div className="mt-4 flex-1 bg-indigo-50 p-6 rounded-lg border border-indigo-200 shadow-md flex flex-col lg:min-h-[16rem]">
+              <h3 className="text-lg font-semibold text-gray-800 mb-3 flex items-center">
+                <span className="text-lg mr-2">💬</span>
+                Ask a Custom Question
+              </h3>
+              <textarea
+                value={question}
+                onChange={(e) => setQuestion(e.target.value)}
+                placeholder="Ask anything about your data... (e.g., 'What patterns do you see?')"
+                className="w-full px-4 py-3 border-2 border-indigo-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all duration-200 resize-none text-gray-900 placeholder-gray-400 mb-3"
+                rows={3}
+              />
+              <button
+                onClick={handleAskQuestion}
+                disabled={
+                  !question.trim() ||
+                  data.length === 0 ||
+                  questionLoading ||
+                  !isPasswordValid
+                }
+                className={`px-4 py-2 rounded-full text-sm font-semibold transition-all duration-200 flex items-center justify-center mb-3
+                  ${
+                    !question.trim() ||
+                    data.length === 0 ||
+                    questionLoading ||
+                    !isPasswordValid
+                      ? "bg-gray-200 text-gray-500 cursor-not-allowed"
+                      : "bg-indigo-600 text-white hover:bg-indigo-700 shadow-md"
+                  }`}
+              >
+                {questionLoading ? (
+                  <>
+                    <span className="mr-2 animate-spin">🌀</span> Thinking...
+                  </>
+                ) : (
+                  <>
+                    <span className="mr-2">🤔</span> Ask Question
+                  </>
+                )}
+              </button>
+              {answer && (
+                <div className="bg-white p-4 rounded-lg border border-indigo-300 mt-2">
+                  <p className="text-gray-800 whitespace-pre-wrap">{answer}</p>
+                </div>
+              )}
+            </div>
           </div>
-        </div>{" "}
+        </div>
       </div>
     </div>
   );
