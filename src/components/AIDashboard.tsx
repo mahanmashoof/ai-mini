@@ -386,7 +386,9 @@ const AIDashboard = () => {
                 </div>
               )}
               {aiSummary ? (
-                <p className="text-gray-800 whitespace-pre-wrap">{aiSummary}</p>
+                <p className="text-gray-800 whitespace-pre-wrap animate-fade-in">
+                  {aiSummary}
+                </p>
               ) : (
                 !aiLoading &&
                 !aiError && (
@@ -440,7 +442,7 @@ const AIDashboard = () => {
                 )}
               </button>
               {answer && (
-                <div className="bg-white p-4 rounded-lg border border-indigo-300 mt-2">
+                <div className="bg-white p-4 rounded-lg border border-indigo-300 mt-2 animate-fade-in">
                   <p className="text-gray-800 whitespace-pre-wrap">{answer}</p>
                 </div>
               )}
